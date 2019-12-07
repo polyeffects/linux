@@ -49,9 +49,9 @@ __must_check curve25519_generate_public(u8 pub[CURVE25519_KEY_SIZE],
 				    CURVE25519_KEY_SIZE)))
 		return false;
 
-	if (IS_ENABLED(CONFIG_CRYPTO_ARCH_HAVE_LIB_CURVE25519))
-		curve25519_base_arch(pub, secret);
-	else
+	//if (IS_ENABLED(CONFIG_CRYPTO_ARCH_HAVE_LIB_CURVE25519))
+		//curve25519_base_arch(pub, secret);
+	//else
 		curve25519_generic(pub, secret, curve25519_base_point);
 	return crypto_memneq(pub, curve25519_null_point, CURVE25519_KEY_SIZE);
 }
