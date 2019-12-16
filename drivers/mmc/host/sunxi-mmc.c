@@ -15,6 +15,7 @@
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
+#include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
@@ -278,6 +279,9 @@ struct sunxi_mmc_host {
 	struct clk	*clk_mmc;
 	struct clk	*clk_sample;
 	struct clk	*clk_output;
+
+	/* gpio */
+	struct gpio_desc *enable_gpio;
 
 	/* irq */
 	spinlock_t	lock;
@@ -1279,6 +1283,11 @@ static int sunxi_mmc_resource_request(struct sunxi_mmc_host *host,
 	if (ret)
 		return ret;
 
+	host->enable_gpio = devm_gpiod_get_optional(&pdev->dev,
+						    "enable", GPIOD_OUT_HIGH);
+	if (IS_ERR(host->enable_gpio))
+		return PTR_ERR(host->enable_gpio);
+
 	host->reg_base = devm_ioremap_resource(&pdev->dev,
 			      platform_get_resource(pdev, IORESOURCE_MEM, 0));
 	if (IS_ERR(host->reg_base))
@@ -1430,6 +1439,8 @@ static int sunxi_mmc_probe(struct platform_device *pdev)
 	/* TODO: This driver doesn't support HS400 mode yet */
 	mmc->caps2 &= ~MMC_CAP2_HS400;
 
+	gpiod_set_value(host->enable_gpio, 1);
+
 	ret = sunxi_mmc_init_host(host);
 	if (ret)
 		goto error_free_dma;
@@ -1460,6 +1471,8 @@ static int sunxi_mmc_remove(struct platform_device *pdev)
 {
 	struct mmc_host	*mmc = platform_get_drvdata(pdev);
 	struct sunxi_mmc_host *host = mmc_priv(mmc);
+
+	gpiod_set_value(host->enable_gpio, 0);
 
 	mmc_remove_host(mmc);
 	//pm_runtime_force_suspend(&pdev->dev);
