@@ -128,6 +128,7 @@ static const struct regmap_range axp288_volatile_ranges[] = {
 	regmap_reg_range(AXP288_BC_GLOBAL, AXP288_BC_GLOBAL),
 	regmap_reg_range(AXP288_BC_DET_STAT, AXP288_BC_DET_STAT),
 	regmap_reg_range(AXP20X_CHRG_BAK_CTRL, AXP20X_CHRG_BAK_CTRL),
+	regmap_reg_range(AXP22X_CHRG_CTRL3, AXP22X_CHRG_CTRL3),
 	regmap_reg_range(AXP20X_IRQ1_EN, AXP20X_IPSOUT_V_HIGH_L),
 	regmap_reg_range(AXP20X_TIMER_CTRL, AXP20X_TIMER_CTRL),
 	regmap_reg_range(AXP22X_GPIO_STATE, AXP22X_GPIO_STATE),
@@ -806,6 +807,9 @@ static const struct mfd_cell axp813_cells[] = {
 		.num_resources	= ARRAY_SIZE(axp803_usb_power_supply_resources),
 		.resources	= axp803_usb_power_supply_resources,
 		.of_compatible	= "x-powers,axp813-usb-power-supply",
+	}, {
+		.name		= "axp20x-leds",
+		.of_compatible	= "x-powers,axp813-leds",
 	},
 };
 

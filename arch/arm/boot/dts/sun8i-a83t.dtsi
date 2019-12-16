@@ -270,11 +270,30 @@
 		};
 	};
 
+	scpi_protocol: scpi {
+	        compatible = "arm,scpi";
+	        mboxes = <&msgbox 0>, <&msgbox 1>;
+	        shmem = <&cpu_scp>;
+	};
+
 	soc {
 		compatible = "simple-bus";
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges;
+
+		dai: dai@01c23000 {
+			#sound-dai-cells = <0>;
+			compatible = "allwinner,sun8i-a83t-i2s";
+			reg = <0x01c23000 0x200>;
+			interrupts = <GIC_SPI 98 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&ccu CLK_BUS_TDM>, <&ccu CLK_TDM>;
+			clock-names = "apb", "mod";
+			resets = <&ccu RST_BUS_TDM>;
+			dmas = <&dma 28>, <&dma 28>;
+			dma-names = "rx", "tx";
+			status = "disabled";
+		};
 
 		display_clocks: clock@1000000 {
 			compatible = "allwinner,sun8i-a83t-de2-clk";
@@ -392,6 +411,32 @@
 			compatible = "allwinner,sun8i-a83t-system-controller",
 				"syscon";
 			reg = <0x01c00000 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+
+			sram_a2: sram@40000 {
+				compatible = "mmio-sram";
+				reg = <0x00040000 0x14000>;
+				#address-cells = <1>;
+				#size-cells = <1>;
+				ranges = <0 0x00040000 0x14000>;
+
+				cpu_scp: scp-shmem@13e00 {
+					compatible = "allwinner,sun8i-a83t-scp-shmem";
+					reg = <0x13e00 0x200>;
+				};
+			};
+		};
+
+		video-codec@01c0e000 {
+			compatible = "allwinner,sun8i-a83t-video-engine";
+			reg = <0x01c0e000 0x1000>;
+			clocks = <&ccu CLK_BUS_VE>, <&ccu CLK_VE>,
+				 <&ccu CLK_DRAM_VE>;
+			clock-names = "ahb", "mod", "ram";
+			resets = <&ccu RST_BUS_VE>;
+			interrupts = <GIC_SPI 58 IRQ_TYPE_LEVEL_HIGH>;
 		};
 
 		dma: dma-controller@1c02000 {
@@ -561,6 +606,16 @@
 			resets = <&ccu RST_BUS_SS>;
 			clocks = <&ccu CLK_BUS_SS>, <&ccu CLK_SS>;
 			clock-names = "bus", "mod";
+		};
+
+		msgbox: mailbox@1c17000 {
+			compatible = "allwinner,sun8i-a83t-msgbox",
+				     "allwinner,sun6i-a31-msgbox";
+			reg = <0x01c17000 0x1000>;
+			clocks = <&ccu CLK_BUS_MSGBOX>;
+			resets = <&ccu RST_BUS_MSGBOX>;
+			interrupts = <GIC_SPI 49 IRQ_TYPE_LEVEL_HIGH>;
+			#mbox-cells = <1>;
 		};
 
 		usb_otg: usb@1c19000 {
@@ -759,6 +814,11 @@
 			spdif_tx_pin: spdif-tx-pin {
 				pins = "PE18";
 				function = "spdif";
+			};
+
+			i2s0_pins: i2s0-pins {
+				pins = "PB4", "PB5", "PB6", "PB7", "PB8";
+				function = "i2s0";
 			};
 
 			uart0_pb_pins: uart0-pb-pins {
