@@ -182,6 +182,23 @@
 			(GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_HIGH)>;
 	};
 
+	sound_hdmi: sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,name = "allwinner-hdmi";
+		simple-audio-card,mclk-fs = <256>;
+
+		simple-audio-card,codec {
+			sound-dai = <&hdmi>;
+		};
+
+		simple-audio-card,cpu {
+			sound-dai = <&i2s1>;
+			dai-tdm-slot-num = <2>;
+			dai-tdm-slot-width = <32>;
+		};
+	};
+
 	soc {
 		compatible = "simple-bus";
 		#address-cells = <1>;
@@ -244,6 +261,71 @@
 			allwinner,sram = <&ve_sram 1>;
 		};
 
+		gpu_opp_table: opp-table2 {
+			compatible = "operating-points-v2";
+
+			opp00 {
+				opp-hz = /bits/ 64 <756000000>;
+				opp-microvolt = <1040000>;
+			};
+			opp01 {
+				opp-hz = /bits/ 64 <624000000>;
+				opp-microvolt = <950000>;
+			};
+			opp02 {
+				opp-hz = /bits/ 64 <576000000>;
+				opp-microvolt = <930000>;
+			};
+			opp03 {
+				opp-hz = /bits/ 64 <540000000>;
+				opp-microvolt = <910000>;
+			};
+			opp04 {
+				opp-hz = /bits/ 64 <504000000>;
+				opp-microvolt = <890000>;
+			};
+			opp05 {
+				opp-hz = /bits/ 64 <456000000>;
+				opp-microvolt = <870000>;
+			};
+			opp06 {
+				opp-hz = /bits/ 64 <432000000>;
+				opp-microvolt = <860000>;
+			};
+			opp07 {
+				opp-hz = /bits/ 64 <420000000>;
+				opp-microvolt = <850000>;
+			};
+			opp08 {
+				opp-hz = /bits/ 64 <408000000>;
+				opp-microvolt = <840000>;
+			};
+			opp09 {
+				opp-hz = /bits/ 64 <384000000>;
+				opp-microvolt = <830000>;
+			};
+			opp10 {
+				opp-hz = /bits/ 64 <360000000>;
+				opp-microvolt = <820000>;
+			};
+			opp11 {
+				opp-hz = /bits/ 64 <336000000>;
+				opp-microvolt = <810000>;
+			};
+			opp12 {
+				opp-hz = /bits/ 64 <312000000>;
+				opp-microvolt = <810000>;
+			};
+			opp13 {
+				opp-hz = /bits/ 64 <264000000>;
+				opp-microvolt = <810000>;
+			};
+			opp14 {
+				opp-hz = /bits/ 64 <216000000>;
+				opp-microvolt = <810000>;
+			};
+		};
+
 		gpu: gpu@1800000 {
 			compatible = "allwinner,sun50i-h6-mali",
 				     "arm,mali-t720";
@@ -255,6 +337,7 @@
 			clocks = <&ccu CLK_GPU>, <&ccu CLK_BUS_GPU>;
 			clock-names = "core", "bus";
 			resets = <&ccu RST_BUS_GPU>;
+			operating-points-v2 = <&gpu_opp_table>;
 			status = "disabled";
 		};
 
@@ -619,6 +702,19 @@
 			status = "disabled";
 		};
 
+		i2s1: i2s@5091000 {
+			#sound-dai-cells = <0>;
+			compatible = "allwinner,sun50i-h6-i2s";
+			reg = <0x05091000 0x1000>;
+			interrupts = <GIC_SPI 19 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&ccu CLK_BUS_I2S1>, <&ccu CLK_I2S1>;
+			clock-names = "apb", "mod";
+			dmas = <&dma 4>;
+			resets = <&ccu RST_BUS_I2S1>;
+			dma-names = "tx";
+			allwinner,playback-channels = <8>;
+		};
+
 		usb2otg: usb@5100000 {
 			compatible = "allwinner,sun50i-h6-musb",
 				     "allwinner,sun8i-a33-musb";
@@ -734,6 +830,7 @@
 		};
 
 		hdmi: hdmi@6000000 {
+			#sound-dai-cells = <0>;
 			compatible = "allwinner,sun50i-h6-dw-hdmi";
 			reg = <0x06000000 0x10000>;
 			reg-io-width = <1>;
