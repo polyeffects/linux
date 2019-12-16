@@ -401,7 +401,10 @@ static int __init do_mount_root(const char *name, const char *fs,
 		return -ENOMEM;
 
 	data_page = page_address(p);
-	strncpy(data_page, data, PAGE_SIZE - 1);
+	if (data)
+		strncpy(data_page, data, PAGE_SIZE - 1);
+	else
+		data_page[0] = 0;
 
 	ret = do_mount(name, "/root", fs, flags, data_page);
 	if (ret)
