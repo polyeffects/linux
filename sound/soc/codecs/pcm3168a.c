@@ -275,12 +275,16 @@ static int pcm3168a_reset(struct pcm3168a_priv *pcm3168a)
 {
 	int ret;
 
+	//printk("pcm3168a : sleeping before reset");
+	msleep(DIV_ROUND_UP(3846 * 1000, pcm3168a->sysclk));
 	ret = regmap_write(pcm3168a->regmap, PCM3168A_RST_SMODE, 0);
+	//printk("pcm3168a : regmap written in reset");
 	if (ret)
 		return ret;
 
 	/* Internal reset is de-asserted after 3846 SCKI cycles */
 	msleep(DIV_ROUND_UP(3846 * 1000, pcm3168a->sysclk));
+	//printk("pcm3168a : sleep done");
 
 	return regmap_write(pcm3168a->regmap, PCM3168A_RST_SMODE,
 			PCM3168A_MRST_MASK | PCM3168A_SRST_MASK);
@@ -739,7 +743,13 @@ int pcm3168a_probe(struct device *dev, struct regmap *regmap)
 		return ret;
 	}
 
+	//ret = clk_set_rate(pcm3168a->scki, 24576000);
+	//if (ret) {
+		//dev_err(dev, "Failed to set clock rate: %d\n", ret);
+		//goto err_clk;
+	//}
 	pcm3168a->sysclk = clk_get_rate(pcm3168a->scki);
+	printk("PCM3168A clock rate is : %lu", pcm3168a->sysclk);
 
 	for (i = 0; i < ARRAY_SIZE(pcm3168a->supplies); i++)
 		pcm3168a->supplies[i].supply = pcm3168a_supply_names[i];
@@ -786,10 +796,10 @@ int pcm3168a_probe(struct device *dev, struct regmap *regmap)
 	return 0;
 
 err_regulator:
-	regulator_bulk_disable(ARRAY_SIZE(pcm3168a->supplies),
-			pcm3168a->supplies);
+	//regulator_bulk_disable(ARRAY_SIZE(pcm3168a->supplies),
+	//		pcm3168a->supplies);
 err_clk:
-	clk_disable_unprepare(pcm3168a->scki);
+	//clk_disable_unprepare(pcm3168a->scki);
 
 	return ret;
 }

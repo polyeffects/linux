@@ -47,9 +47,9 @@
 
 #include <dt-bindings/gpio/gpio.h>
 
-&codec_analog {
-	cpvdd-supply = <&reg_eldo1>;
-};
+/* &codec_analog { */
+/* 	hpvcc-supply = <&reg_eldo1>; */
+/* }; */
 
 &mmc0 {
 	pinctrl-names = "default";

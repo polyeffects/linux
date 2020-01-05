@@ -46,11 +46,12 @@
 /dts-v1/;
 
 #include "sun50i-a64-sopine.dtsi"
+#include <dt-bindings/pwm/pwm.h>
 
 / {
 	model = "SoPine with baseboard";
 	compatible = "pine64,sopine-baseboard", "pine64,sopine",
-		     "allwinner,sun50i-a64";
+			   "allwinner,sun50i-a64";
 
 	aliases {
 		ethernet0 = &emac;
@@ -61,23 +62,75 @@
 		stdout-path = "serial0:115200n8";
 	};
 
-	hdmi-connector {
-		compatible = "hdmi-connector";
-		type = "a";
-
-		port {
-			hdmi_con_in: endpoint {
-				remote-endpoint = <&hdmi_out_con>;
+reg_vcc1v8: vcc1v8 {
+				compatible = "regulator-fixed";
+				regulator-name = "vcc1v8";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
 			};
-		};
-	};
 
-	reg_vcc1v8: vcc1v8 {
-		compatible = "regulator-fixed";
-		regulator-name = "vcc1v8";
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
-	};
+			codec5_supply: fixedregulator@1 {
+				compatible = "regulator-fixed";
+				regulator-name = "VCCAD";
+				regulator-min-microvolt = <5000000>;
+				regulator-max-microvolt = <5000000>;
+			};
+
+backlight: backlight {
+			   compatible = "pwm-backlight";
+			   pwms = <&r_pwm 20000 100000 0>;
+			   brightness-levels = <1 2 4 8 16 32 64 128 512>;
+			   default-brightness-level = <8>;
+			   enable-gpios = <&pio 7 10 GPIO_ACTIVE_HIGH>; /* LCD-BL-EN: PH10 */
+		   };
+
+
+		   rotary@0 {
+			   compatible = "rotary-encoder";
+			   gpios = <&pio 6 9 0>, <&pio 6 7 0>; /* A: PG9  B: PG7 */
+			   linux,axis = <0>; /* REL_X */
+			   /* rotary-encoder,steps = <24>; */
+               rotary-encoder,relative-axis;
+		   };
+
+		   rotary@1 {
+			   compatible = "rotary-encoder";
+			   gpios = <&pio 6 12 0>, <&pio 6 10 0>; /* A: PG12  B: PG10 */
+			   linux,axis = <1>; /* REL_Y  */
+			   /* rotary-encoder,steps = <24>; */
+               rotary-encoder,relative-axis;
+		   };
+
+		   gpio_keys {
+			   compatible = "gpio-keys";
+			   /* poll-interval = <100>; */
+
+			   a-key { 
+				   label = "a key";
+				   gpios = <&pio 6 8 GPIO_ACTIVE_LOW>; /* tap PG8 */
+				   linux,code = <30>; /* KEY_A */
+			   };
+
+			   b-key { 
+				   label = "b key";
+				   gpios = <&pio 6 6 GPIO_ACTIVE_LOW>; /* step PG6 */
+				   linux,code = <48>; /* KEY_B */
+			   };
+
+			   c-key { 
+				   label = "c key";
+				   gpios = <&pio 6 11 GPIO_ACTIVE_LOW>; /* tap PG11 */
+				   linux,code = <46>; /* KEY_LEFT */
+			   };
+		   };
+
+		   pcm_3168_clock: osc12288_clk {
+			   compatible = "fixed-clock";
+			   #clock-cells = <0>;
+			   clock-frequency = <12288000>;
+			   clock-output-names = "scki";
+			   status = "okay";
+		   };
 };
 
 &ac_power_supply {
@@ -88,17 +141,13 @@
 	status = "okay";
 };
 
-&codec {
-	status = "okay";
-};
+/* &codec { */
+/* 	status = "okay"; */
+/* }; */
 
-&codec_analog {
-	status = "okay";
-};
-
-&dai {
-	status = "okay";
-};
+/* &codec_analog { */
+/* 	status = "okay"; */
+/* }; */
 
 &de {
 	status = "okay";
@@ -110,33 +159,6 @@
 
 &ehci1 {
 	status = "okay";
-};
-
-&emac {
-	pinctrl-names = "default";
-	pinctrl-0 = <&rgmii_pins>;
-	phy-mode = "rgmii";
-	phy-handle = <&ext_rgmii_phy>;
-	phy-supply = <&reg_dc1sw>;
-	status = "okay";
-};
-
-&hdmi {
-	hvcc-supply = <&reg_dldo1>;
-	status = "okay";
-};
-
-&hdmi_out {
-	hdmi_out_con: endpoint {
-		remote-endpoint = <&hdmi_con_in>;
-	};
-};
-
-&mdio {
-	ext_rgmii_phy: ethernet-phy@1 {
-		compatible = "ethernet-phy-ieee802.3-c22";
-		reg = <1>;
-	};
 };
 
 &mmc2 {
@@ -158,56 +180,116 @@
 	status = "okay";
 };
 
+&reg_aldo1 {
+	regulator-always-on; /* not sure how to specify this to panel */
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+	regulator-name = "aldo1";
+};
+
 &reg_dc1sw {
-	/*
-	 * Ethernet PHY needs 30ms to properly power up and some more
-	 * to initialize. 100ms should be plenty of time to finish
-	 * whole process.
-	 */
-	regulator-enable-ramp-delay = <100000>;
+	regulator-always-on; /* not sure how to specify this to panel */
 	regulator-name = "vcc-phy";
 };
 
-&reg_dldo1 {
-	regulator-min-microvolt = <3300000>;
-	regulator-max-microvolt = <3300000>;
-	regulator-name = "vcc-hdmi";
-};
+/* &reg_dldo1 { */
+/* 	regulator-min-microvolt = <3300000>; */
+/* 	regulator-max-microvolt = <3300000>; */
+/* 	regulator-name = "vcc-hdmi"; */
+/* }; */
 
 &reg_dldo2 {
+	regulator-always-on; /* not sure how to specify this to panel */
 	regulator-min-microvolt = <3300000>;
 	regulator-max-microvolt = <3300000>;
 	regulator-name = "vcc-mipi";
 };
 
-&reg_dldo4 {
-	regulator-min-microvolt = <3300000>;
-	regulator-max-microvolt = <3300000>;
-	regulator-name = "vcc-wifi";
-};
-
-&simplefb_hdmi {
-	vcc-hdmi-supply = <&reg_dldo1>;
-};
-
-&sound {
-	simple-audio-card,aux-devs = <&codec_analog>;
-	simple-audio-card,widgets = "Microphone", "Microphone Jack",
-				    "Headphone", "Headphone Jack";
-	simple-audio-card,routing =
-			"Left DAC", "AIF1 Slot 0 Left",
-			"Right DAC", "AIF1 Slot 0 Right",
-			"Headphone Jack", "HP",
-			"AIF1 Slot 0 Left ADC", "Left ADC",
-			"AIF1 Slot 0 Right ADC", "Right ADC",
-			"MIC2", "Microphone Jack";
+&reg_ldo_io0 {
+	regulator-always-on; /* CTP doesn't have a regulator slot */
+	regulator-min-microvolt = <2800000>;
+	regulator-max-microvolt = <2800000>;
+	regulator-name = "vdd-ctp";
 	status = "okay";
 };
+
+/* &reg_dldo4 { */
+/* 	regulator-min-microvolt = <3300000>; */
+/* 	regulator-max-microvolt = <3300000>; */
+/* 	regulator-name = "vcc-wifi"; */
+/* }; */
+
+/* &sound { */
+/* 	simple-audio-card,aux-devs = <&codec_analog>; */
+/* 	simple-audio-card,widgets = "Microphone", "Microphone Jack", */
+/* 				    "Headphone", "Headphone Jack"; */
+/* 	simple-audio-card,routing = */
+/* 			"Left DAC", "AIF1 Slot 0 Left", */
+/* 			"Right DAC", "AIF1 Slot 0 Right", */
+/* 			"Headphone Jack", "HP", */
+/* 			"AIF1 Slot 0 Left ADC", "Left ADC", */
+/* 			"AIF1 Slot 0 Right ADC", "Right ADC", */
+/* 			"MIC2", "Microphone Jack"; */
+/* 	status = "okay"; */
+/* }; */
+
 
 &uart0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart0_pb_pins>;
 	status = "okay";
+};
+
+&uart4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart4_pins>;
+	status = "okay";
+};
+
+&i2s0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2s0_bclk>, <&i2s0_lrclk>, <&i2s0_mclk>, <&i2s0_sdo0>, <&i2s0_sdi>;
+	status = "okay";
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pins>;
+	status = "okay";
+	clock-frequency = <400000>;
+
+	pcm3168: codec@44 {
+		 compatible = "ti,pcm3168a";
+		 reg = <0x44>;
+		 /* clocks = <&clk_core CLK_AUDIO>; */
+		 /* clocks = <&clk_mcasp0>; */
+		 /* clock-names = "scki"; */
+		 clocks = <&pcm_3168_clock>;
+		 clock-names = "scki";
+		 #sound-dai-cells = <1>;
+		 VDD1-supply = <&reg_aldo1>;
+		 VDD2-supply = <&reg_aldo1>;
+		 VCCAD1-supply = <&codec5_supply>;
+		 VCCAD2-supply = <&codec5_supply>;
+		 VCCDA1-supply = <&codec5_supply>;
+		 VCCDA2-supply = <&codec5_supply>;
+	};
+};
+
+&i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0_pins>;
+	status = "okay";
+	clock-frequency = <400000>;
+
+	touchscreen@5d {
+		compatible = "goodix,gt911";
+		reg = <0x5d>;
+		interrupt-parent = <&pio>;
+		interrupts = <7 4 IRQ_TYPE_EDGE_FALLING>;
+		irq-gpios = <&pio 7 4 GPIO_ACTIVE_HIGH>;	/* CTP-INT: PH4 */
+		reset-gpios = <&pio 7 11 GPIO_ACTIVE_HIGH>;	/* CTP-RST: PH11 */
+	};
 };
 
 &usb_otg {
@@ -217,4 +299,100 @@
 
 &usbphy {
 	status = "okay";
+};
+
+&dphy {
+	status = "okay";
+};
+
+&dsi {
+	vcc-dsi-supply = <&reg_dldo1>;		/* VCC3V3-DSI */
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	panel@0 {
+		compatible = "chance,w500hdc019", "ilitek,ili9881d";
+		reg = <0>;
+		power_supply = <&reg_dc1sw>;	/* VCC-LCD */
+		/* dvdd-supply = <&reg_dldo2>;	/1* VCC-MIPI *1/ */
+		reset-gpios = <&pio 3 24 GPIO_ACTIVE_LOW>; /* LCD-RST: PD24 */
+		/* backlight = <&backlight>; */
+	};
+};
+
+&r_pwm {
+	pinctrl-names = "default";
+	pinctrl-0 = <&r_pwm_pin>;
+	status = "okay";
+};
+
+
+&sound {
+	status = "okay";
+	compatible = "simple-audio-card";
+	simple-audio-card,name = "digit-pcm3168a";
+	/* simple-audio-card,bitclock-inversion; */
+	/* simple-audio-card,frame-inversion; */
+	/* simple-audio-card,channels-playback-override = <0>; */
+	/* simple-audio-card,channels-capture-override  = <4>; */
+	simple-audio-card,widgets =
+		"Line", "Channel1out",
+		"Line", "Channel2out",
+		"Line", "Channel3out",
+		"Line", "Channel4out",
+		"Line", "Channel1in",
+		"Line", "Channel2in",
+		"Line", "Channel3in",
+		"Line", "Channel4in";
+	simple-audio-card,routing =
+		"Channel1out", "AOUT1L",
+		"Channel2out", "AOUT1R",
+		"Channel3out", "AOUT2L",
+		"Channel4out", "AOUT2R",
+		"AIN1L", "Channel1in", 
+		"AIN1R", "Channel2in", 
+		"AIN2L", "Channel3in", 
+		"AIN2R", "Channel4in"; 
+
+	
+	simple-audio-card,dai-link@0 {
+			format = "left_j";
+			frame-master = <&adc_audio_master>;
+			bitclock-master = <&adc_audio_master>;
+			/* frame-inversion; */
+
+			cpu {
+					sound-dai = <&i2s0 0>;
+					dai-tdm-slot-num = <8>;
+					dai-tdm-slot-width = <32>;
+					/* clocks = <&pcm_3168_clock>; */
+					/* clocks = <&ccu CLK_AC_DIG>; */
+			};
+
+			dac_audio_master: codec {
+					sound-dai = <&pcm3168 0>;
+					clocks = <&pcm_3168_clock>;
+			};
+	};
+
+	simple-audio-card,dai-link@1 {
+			format = "left_j";
+			frame-master = <&adc_audio_master>;
+			bitclock-master = <&adc_audio_master>;
+
+			cpu {
+					sound-dai = <&i2s0>;
+					dai-tdm-slot-num = <8>;
+					dai-tdm-slot-width = <32>;
+					/* clocks = <&ccu CLK_AC_DIG>; */
+					/* clocks = <&pcm_3168_clock>; */
+			};
+
+			adc_audio_master: codec {
+					sound-dai = <&pcm3168 1>;
+					clocks = <&pcm_3168_clock>;
+			};
+	};
+
 };
