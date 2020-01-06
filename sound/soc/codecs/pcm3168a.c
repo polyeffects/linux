@@ -1,10 +1,13 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /*
  * PCM3168A codec driver
  *
  * Copyright (C) 2015 Imagination Technologies Ltd.
  *
  * Author: Damien Horsley <Damien.Horsley@imgtec.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
  */
 
 #include <linux/clk.h>
@@ -21,7 +24,8 @@
 
 #define PCM3168A_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | \
 			 SNDRV_PCM_FMTBIT_S24_3LE | \
-			 SNDRV_PCM_FMTBIT_S24_LE)
+			 SNDRV_PCM_FMTBIT_S24_LE | \
+			 SNDRV_PCM_FMTBIT_S32_LE)
 
 #define PCM3168A_FMT_I2S		0x0
 #define PCM3168A_FMT_LEFT_J		0x1
@@ -43,25 +47,15 @@ static const char *const pcm3168a_supply_names[PCM3168A_NUM_SUPPLIES] = {
 	"VCCDA2"
 };
 
-#define PCM3168A_DAI_DAC		0
-#define PCM3168A_DAI_ADC		1
-
-/* ADC/DAC side parameters */
-struct pcm3168a_io_params {
-	bool master_mode;
-	unsigned int fmt;
-	int tdm_slots;
-	u32 tdm_mask;
-	int slot_width;
-};
-
 struct pcm3168a_priv {
 	struct regulator_bulk_data supplies[PCM3168A_NUM_SUPPLIES];
 	struct regmap *regmap;
 	struct clk *scki;
+	bool adc_master_mode;
+	bool dac_master_mode;
 	unsigned long sysclk;
-
-	struct pcm3168a_io_params io_params[2];
+	unsigned int adc_fmt;
+	unsigned int dac_fmt;
 };
 
 static const char *const pcm3168a_roll_off[] = { "Sharp", "Slow" };
@@ -269,7 +263,7 @@ static unsigned int pcm3168a_scki_ratios[] = {
 #define PCM3168A_NUM_SCKI_RATIOS_DAC	ARRAY_SIZE(pcm3168a_scki_ratios)
 #define PCM3168A_NUM_SCKI_RATIOS_ADC	(ARRAY_SIZE(pcm3168a_scki_ratios) - 2)
 
-#define PCM3168A_MAX_SYSCLK		36864000
+#define PCM1368A_MAX_SYSCLK		36864000
 
 static int pcm3168a_reset(struct pcm3168a_priv *pcm3168a)
 {
@@ -306,7 +300,7 @@ static int pcm3168a_set_dai_sysclk(struct snd_soc_dai *dai,
 	struct pcm3168a_priv *pcm3168a = snd_soc_component_get_drvdata(dai->component);
 	int ret;
 
-	if (freq > PCM3168A_MAX_SYSCLK)
+	if (freq > PCM1368A_MAX_SYSCLK)
 		return -EINVAL;
 
 	ret = clk_set_rate(pcm3168a->scki, freq);
@@ -318,12 +312,15 @@ static int pcm3168a_set_dai_sysclk(struct snd_soc_dai *dai,
 	return 0;
 }
 
-static int pcm3168a_set_dai_fmt(struct snd_soc_dai *dai, unsigned int format)
+static int pcm3168a_set_dai_fmt(struct snd_soc_dai *dai,
+			       unsigned int format, bool dac)
 {
 	struct snd_soc_component *component = dai->component;
 	struct pcm3168a_priv *pcm3168a = snd_soc_component_get_drvdata(component);
 	u32 fmt, reg, mask, shift;
 	bool master_mode;
+
+	//printk("++++ set dai format, %u", format);
 
 	switch (format & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_LEFT_J:
@@ -345,6 +342,7 @@ static int pcm3168a_set_dai_fmt(struct snd_soc_dai *dai, unsigned int format)
 		dev_err(component->dev, "unsupported dai format\n");
 		return -EINVAL;
 	}
+	////printk("++++ set dai fmt, %u", fmt);
 
 	switch (format & SND_SOC_DAIFMT_MASTER_MASK) {
 	case SND_SOC_DAIFMT_CBS_CFS:
@@ -365,55 +363,37 @@ static int pcm3168a_set_dai_fmt(struct snd_soc_dai *dai, unsigned int format)
 		return -EINVAL;
 	}
 
-	if (dai->id == PCM3168A_DAI_DAC) {
+	if (dac) {
 		reg = PCM3168A_DAC_PWR_MST_FMT;
 		mask = PCM3168A_DAC_FMT_MASK;
 		shift = PCM3168A_DAC_FMT_SHIFT;
+		pcm3168a->dac_master_mode = master_mode;
+		pcm3168a->dac_fmt = fmt;
+		printk("PCM3168a ++++ dac_master_mode, %d", master_mode);
 	} else {
 		reg = PCM3168A_ADC_MST_FMT;
 		mask = PCM3168A_ADC_FMTAD_MASK;
 		shift = PCM3168A_ADC_FMTAD_SHIFT;
+		pcm3168a->adc_master_mode = master_mode;
+		pcm3168a->adc_fmt = fmt;
+		printk("PCM3168a ++++ adc_master_mode, %d", master_mode);
 	}
-
-	pcm3168a->io_params[dai->id].master_mode = master_mode;
-	pcm3168a->io_params[dai->id].fmt = fmt;
 
 	regmap_update_bits(pcm3168a->regmap, reg, mask, fmt << shift);
 
 	return 0;
 }
 
-static int pcm3168a_set_tdm_slot(struct snd_soc_dai *dai, unsigned int tx_mask,
-				 unsigned int rx_mask, int slots,
-				 int slot_width)
+static int pcm3168a_set_dai_fmt_dac(struct snd_soc_dai *dai,
+			       unsigned int format)
 {
-	struct snd_soc_component *component = dai->component;
-	struct pcm3168a_priv *pcm3168a = snd_soc_component_get_drvdata(component);
-	struct pcm3168a_io_params *io_params = &pcm3168a->io_params[dai->id];
+	return pcm3168a_set_dai_fmt(dai, format, true);
+}
 
-	if (tx_mask >= (1<<slots) || rx_mask >= (1<<slots)) {
-		dev_err(component->dev,
-			"Bad tdm mask tx: 0x%08x rx: 0x%08x slots %d\n",
-			tx_mask, rx_mask, slots);
-		return -EINVAL;
-	}
-
-	if (slot_width &&
-	    (slot_width != 16 && slot_width != 24 && slot_width != 32 )) {
-		dev_err(component->dev, "Unsupported slot_width %d\n",
-			slot_width);
-		return -EINVAL;
-	}
-
-	io_params->tdm_slots = slots;
-	io_params->slot_width = slot_width;
-	/* Ignore the not relevant mask for the DAI/direction */
-	if (dai->id == PCM3168A_DAI_DAC)
-		io_params->tdm_mask = tx_mask;
-	else
-		io_params->tdm_mask = rx_mask;
-
-	return 0;
+static int pcm3168a_set_dai_fmt_adc(struct snd_soc_dai *dai,
+			       unsigned int format)
+{
+	return pcm3168a_set_dai_fmt(dai, format, false);
 }
 
 static int pcm3168a_hw_params(struct snd_pcm_substream *substream,
@@ -422,31 +402,34 @@ static int pcm3168a_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_component *component = dai->component;
 	struct pcm3168a_priv *pcm3168a = snd_soc_component_get_drvdata(component);
-	struct pcm3168a_io_params *io_params = &pcm3168a->io_params[dai->id];
-	bool master_mode;
+	bool tx, master_mode;
 	u32 val, mask, shift, reg;
 	unsigned int rate, fmt, ratio, max_ratio;
-	unsigned int tdm_slots;
-	int i, slot_width;
+	unsigned int chan;
+	int i, min_frame_size;
 
 	rate = params_rate(params);
+	chan = params_channels(params);
 
 	ratio = pcm3168a->sysclk / rate;
+	printk("++++ PCM3168a rate, %u chan, %u ratio %u", rate, chan, ratio);
 
-	if (dai->id == PCM3168A_DAI_DAC) {
+	tx = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
+	if (tx) {
 		max_ratio = PCM3168A_NUM_SCKI_RATIOS_DAC;
 		reg = PCM3168A_DAC_PWR_MST_FMT;
 		mask = PCM3168A_DAC_MSDA_MASK;
 		shift = PCM3168A_DAC_MSDA_SHIFT;
+		master_mode = pcm3168a->dac_master_mode;
+		fmt = pcm3168a->dac_fmt;
 	} else {
 		max_ratio = PCM3168A_NUM_SCKI_RATIOS_ADC;
 		reg = PCM3168A_ADC_MST_FMT;
 		mask = PCM3168A_ADC_MSAD_MASK;
 		shift = PCM3168A_ADC_MSAD_SHIFT;
+		master_mode = pcm3168a->adc_master_mode;
+		fmt = pcm3168a->adc_fmt;
 	}
-
-	master_mode = io_params->master_mode;
-	fmt = io_params->fmt;
 
 	for (i = 0; i < max_ratio; i++) {
 		if (pcm3168a_scki_ratios[i] == ratio)
@@ -458,58 +441,42 @@ static int pcm3168a_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
-	if (io_params->slot_width)
-		slot_width = io_params->slot_width;
-	else
-		slot_width = params_width(params);
-
-	switch (slot_width) {
-	case 16:
+	min_frame_size = params_width(params) * 2;
+	switch (min_frame_size) {
+	case 32:
 		if (master_mode || (fmt != PCM3168A_FMT_RIGHT_J)) {
-			dev_err(component->dev, "16-bit slots are supported only for slave mode using right justified\n");
+			dev_err(component->dev, "32-bit frames are supported only for slave mode using right justified\n");
 			return -EINVAL;
 		}
 		fmt = PCM3168A_FMT_RIGHT_J_16;
 		break;
-	case 24:
+	case 48:
 		if (master_mode || (fmt & PCM3168A_FMT_DSP_MASK)) {
-			dev_err(component->dev, "24-bit slots not supported in master mode, or slave mode using DSP\n");
+			dev_err(component->dev, "48-bit frames not supported in master mode, or slave mode using DSP\n");
 			return -EINVAL;
 		}
 		break;
-	case 32:
+	case 64:
 		break;
 	default:
-		dev_err(component->dev, "unsupported frame size: %d\n", slot_width);
+		dev_err(component->dev, "unsupported frame size: %d\n", min_frame_size);
 		return -EINVAL;
 	}
 
-	if (io_params->tdm_slots)
-		tdm_slots = io_params->tdm_slots;
-	else
-		tdm_slots = params_channels(params);
-
-	/*
-	 * Switch the codec to TDM mode when more than 2 TDM slots are needed
-	 * for the stream.
-	 * If pcm3168a->tdm_slots is not set or set to more than 2 (8/6 usually)
-	 * then DIN1/DOUT1 is used in TDM mode.
-	 * If pcm3168a->tdm_slots is set to 2 then DIN1/2/3/4 and DOUT1/2/3 is
-	 * used in normal mode, no need to switch to TDM modes.
-	 */
-	if (tdm_slots > 2) {
+	/* for TDM */
+	if (chan > 2) {
+		//printk("++++ chan, %u", chan);
 		switch (fmt) {
 		case PCM3168A_FMT_I2S:
-		case PCM3168A_FMT_DSP_A:
 			fmt = PCM3168A_FMT_I2S_TDM;
+			//printk("++++ format is I2S TDM");
 			break;
 		case PCM3168A_FMT_LEFT_J:
-		case PCM3168A_FMT_DSP_B:
 			fmt = PCM3168A_FMT_LEFT_J_TDM;
+			//printk("++++ format is LEFT_J TDM");
 			break;
 		default:
-			dev_err(component->dev,
-				"TDM is supported under DSP/I2S/Left_J only\n");
+			dev_err(component->dev, "TDM is supported under I2S/Left_J only\n");
 			return -EINVAL;
 		}
 	}
@@ -521,7 +488,7 @@ static int pcm3168a_hw_params(struct snd_pcm_substream *substream,
 
 	regmap_update_bits(pcm3168a->regmap, reg, mask, val);
 
-	if (dai->id == PCM3168A_DAI_DAC) {
+	if (tx) {
 		mask = PCM3168A_DAC_FMT_MASK;
 		shift = PCM3168A_DAC_FMT_SHIFT;
 	} else {
@@ -539,12 +506,19 @@ static int pcm3168a_startup(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_component *component = dai->component;
 	struct pcm3168a_priv *pcm3168a = snd_soc_component_get_drvdata(component);
+	bool tx = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
+	unsigned int fmt;
 	unsigned int sample_min;
 	unsigned int channel_max;
 	unsigned int channel_maxs[] = {
-		8, /* DAC */
-		6  /* ADC */
+		6, /* rx */
+		8  /* tx */
 	};
+
+	if (tx)
+		fmt = pcm3168a->dac_fmt;
+	else
+		fmt = pcm3168a->adc_fmt;
 
 	/*
 	 * Available Data Bits
@@ -558,19 +532,20 @@ static int pcm3168a_startup(struct snd_pcm_substream *substream,
 	 * I2S
 	 * LEFT_J
 	 */
-	switch (pcm3168a->io_params[dai->id].fmt) {
+	switch (fmt) {
 	case PCM3168A_FMT_RIGHT_J:
 		sample_min  = 16;
 		channel_max =  2;
+		//printk("++++ startup format is right");
 		break;
 	case PCM3168A_FMT_LEFT_J:
 	case PCM3168A_FMT_I2S:
-	case PCM3168A_FMT_DSP_A:
-	case PCM3168A_FMT_DSP_B:
 		sample_min  = 24;
-		channel_max = channel_maxs[dai->id];
+		channel_max = channel_maxs[tx];
+		//printk("++++ startup format is left / i2s");
 		break;
 	default:
+		//printk("++++ startup format is default");
 		sample_min  = 24;
 		channel_max =  2;
 	}
@@ -579,29 +554,30 @@ static int pcm3168a_startup(struct snd_pcm_substream *substream,
 				     SNDRV_PCM_HW_PARAM_SAMPLE_BITS,
 				     sample_min, 32);
 
-	/* Allow all channels in multi DIN/DOUT mode */
-	if (pcm3168a->io_params[dai->id].tdm_slots == 2)
-		channel_max = channel_maxs[dai->id];
-
 	snd_pcm_hw_constraint_minmax(substream->runtime,
 				     SNDRV_PCM_HW_PARAM_CHANNELS,
 				     2, channel_max);
 
 	return 0;
 }
-static const struct snd_soc_dai_ops pcm3168a_dai_ops = {
+static const struct snd_soc_dai_ops pcm3168a_dac_dai_ops = {
 	.startup	= pcm3168a_startup,
-	.set_fmt	= pcm3168a_set_dai_fmt,
+	.set_fmt	= pcm3168a_set_dai_fmt_dac,
 	.set_sysclk	= pcm3168a_set_dai_sysclk,
 	.hw_params	= pcm3168a_hw_params,
-	.digital_mute	= pcm3168a_digital_mute,
-	.set_tdm_slot	= pcm3168a_set_tdm_slot,
+	.digital_mute	= pcm3168a_digital_mute
+};
+
+static const struct snd_soc_dai_ops pcm3168a_adc_dai_ops = {
+	.startup	= pcm3168a_startup,
+	.set_fmt	= pcm3168a_set_dai_fmt_adc,
+	.set_sysclk	= pcm3168a_set_dai_sysclk,
+	.hw_params	= pcm3168a_hw_params
 };
 
 static struct snd_soc_dai_driver pcm3168a_dais[] = {
 	{
 		.name = "pcm3168a-dac",
-		.id = PCM3168A_DAI_DAC,
 		.playback = {
 			.stream_name = "Playback",
 			.channels_min = 1,
@@ -609,11 +585,10 @@ static struct snd_soc_dai_driver pcm3168a_dais[] = {
 			.rates = SNDRV_PCM_RATE_8000_192000,
 			.formats = PCM3168A_FORMATS
 		},
-		.ops = &pcm3168a_dai_ops
+		.ops = &pcm3168a_dac_dai_ops
 	},
 	{
 		.name = "pcm3168a-adc",
-		.id = PCM3168A_DAI_ADC,
 		.capture = {
 			.stream_name = "Capture",
 			.channels_min = 1,
@@ -621,7 +596,7 @@ static struct snd_soc_dai_driver pcm3168a_dais[] = {
 			.rates = SNDRV_PCM_RATE_8000_96000,
 			.formats = PCM3168A_FORMATS
 		},
-		.ops = &pcm3168a_dai_ops
+		.ops = &pcm3168a_adc_dai_ops
 	},
 };
 
