@@ -312,7 +312,8 @@ backlight: backlight {
 	status = "okay";
 
 	panel@0 {
-		compatible = "chance,w500hdc019", "ilitek,ili9881d";
+		/* compatible = "chance,w500hdc019", "ilitek,ili9881d"; */
+		compatible = "chance,w500hdc023", "ilitek,ili9881c";
 		reg = <0>;
 		power_supply = <&reg_dc1sw>;	/* VCC-LCD */
 		/* dvdd-supply = <&reg_dldo2>;	/1* VCC-MIPI *1/ */
