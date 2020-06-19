@@ -712,7 +712,7 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 	pdata->buttons = button;
 	pdata->nbuttons = nbuttons;
 
-	pdata->rep = device_property_read_bool(dev, "autorepeat");
+	pdata->rep = false;
 
 	device_property_read_string(dev, "label", &pdata->name);
 
